@@ -102,6 +102,13 @@ io.on("connection", async (socket) => {
     }
   });
 
+  socket.on("stopTyping", ({ receiverId, chatId }) => {
+    const receiver = users[receiverId];
+    if (receiver.currentChat?._id === chatId) {
+      io.to(receiver.socketId).emit("stoppedTyping");
+    }
+  });
+
   socket.on("messengerActive", (userId) => {
     users[userId].isOnMessenger = true;
   });
