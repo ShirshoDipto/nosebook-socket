@@ -24,7 +24,7 @@ async function createMsg(msg, seenBy, token) {
       },
       body: JSON.stringify({
         conversationId: msg.conversationId,
-        sender: msg.sender,
+        sender: msg.sender._id,
         content: msg.content,
         seenBy,
       }),
@@ -78,10 +78,10 @@ io.on("connection", async (socket) => {
 
         io.to(receiver.socketId).emit("newMsg", notif);
       } else if (
-        !receiver.currentChat._id !== msg.conversationId &&
+        receiver.currentChat?._id !== msg.conversationId &&
         receiver.isOnMessenger
       ) {
-        await createMsg(msg, [msg.sender], sender.token);
+        await createMsg(msg, msg.seenBy, sender.token);
 
         io.to(receiver.socketId).emit("getMsg", msg);
       } else if (receiver.currentChat._id === msg.conversationId) {
@@ -92,6 +92,13 @@ io.on("connection", async (socket) => {
       }
     } catch (error) {
       socket.emit("internalError", error);
+    }
+  });
+
+  socket.on("sendTyping", ({ receiverId, chatId }) => {
+    const receiver = users[receiverId];
+    if (receiver.currentChat?._id === chatId) {
+      io.to(receiver.socketId).emit("getTyping");
     }
   });
 
