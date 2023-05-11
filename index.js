@@ -84,10 +84,10 @@ io.use((socket, next) => {
     return next(new Error("User must be provided."));
   }
 
-  socket.userId = user.user._id;
-  if (!users[`${user.user._id}`]) {
-    users[`${user.user._id}`] = {
-      userInfo: user.user,
+  socket.userId = user.userInfo._id;
+  if (!users[`${user.userInfo._id}`]) {
+    users[`${user.userInfo._id}`] = {
+      userInfo: user.userInfo,
       token: user.token,
       socketId: socket.id,
       currentChat: null,
