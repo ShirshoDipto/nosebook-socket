@@ -39,8 +39,43 @@ async function createMsg(msg, seenBy, token) {
   return resData.message;
 }
 
-async function createNotification() {
-  console.log("Creating...");
+async function checkExistingNotif(receiverId, token) {
+  const res = await fetch(
+    `${serverRoot}/api/notifications/isMsgNotif?receiverId=${receiverId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const resData = await res.json();
+
+  return resData.existingNotif;
+}
+
+async function createNotification(receiverId, token, userInfo, type) {
+  const res = await fetch(`${serverRoot}/api/notifications`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      receiverId,
+      type,
+    }),
+  });
+
+  const resData = await res.json();
+  if (!res.ok) {
+    throw resData;
+  }
+
+  resData.notification.sender = userInfo;
+
+  return resData.notification;
 }
 
 io.use((socket, next) => {
@@ -52,7 +87,7 @@ io.use((socket, next) => {
   socket.userId = user.user._id;
   if (!users[`${user.user._id}`]) {
     users[`${user.user._id}`] = {
-      userId: user.user._id,
+      userInfo: user.user,
       token: user.token,
       socketId: socket.id,
       currentChat: null,
@@ -71,12 +106,18 @@ io.on("connection", async (socket) => {
 
     try {
       if (!receiver || !receiver.isOnMessenger) {
-        const [newMsg, notif] = await Promise.all([
-          createMsg(msg, false),
-          createNotification(),
-        ]);
+        const isNotifExist = await checkExistingNotif(receiverId, sender.token);
 
-        io.to(receiver.socketId).emit("newMsg", notif);
+        if (isNotifExist) {
+          await createMsg(msg, msg.seenBy, sender.token);
+        } else {
+          const [newMsg, notif] = await Promise.all([
+            createMsg(msg, msg.seenBy, sender.token),
+            createNotification(receiverId, sender.token, sender.userInfo, 2),
+          ]);
+
+          io.to(receiver?.socketId).emit("newMsg", notif);
+        }
       } else if (
         receiver.currentChat?._id !== msg.conversationId &&
         receiver.isOnMessenger
@@ -85,8 +126,8 @@ io.on("connection", async (socket) => {
 
         io.to(receiver.socketId).emit("getMsg", msg);
       } else if (receiver.currentChat._id === msg.conversationId) {
-        await createMsg(msg, [msg.sender, receiver.userId], sender.token);
-        msg.seenBy.push(receiver.userId);
+        await createMsg(msg, [msg.sender, receiver.userInfo._id], sender.token);
+        msg.seenBy.push(receiver.userInfo._id);
 
         io.to(receiver.socketId).emit("getMsg", msg);
       }
@@ -95,16 +136,43 @@ io.on("connection", async (socket) => {
     }
   });
 
+  socket.on("sendPost", async ({ userId, userToken, post }) => {
+    try {
+      const sender = users[userId];
+      const res = await fetch(`${serverRoot}/api/users/${userId}`);
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw resData;
+      }
+
+      resData.user.friends.forEach(async (fnd) => {
+        const receiver = users[fnd._id];
+        const notif = await createNotification(
+          fnd._id,
+          sender.token,
+          sender.userInfo,
+          3
+        );
+        if (receiver) {
+          io.to(receiver.socketId).emit("getPost", notif);
+        }
+      });
+    } catch (error) {
+      socket.emit("internalError", error);
+    }
+  });
+
   socket.on("sendTyping", ({ receiverId, chatId }) => {
     const receiver = users[receiverId];
-    if (receiver.currentChat?._id === chatId) {
+    if (receiver?.currentChat?._id === chatId) {
       io.to(receiver.socketId).emit("getTyping");
     }
   });
 
   socket.on("stopTyping", ({ receiverId, chatId }) => {
     const receiver = users[receiverId];
-    if (receiver.currentChat?._id === chatId) {
+    if (receiver?.currentChat?._id === chatId) {
       io.to(receiver.socketId).emit("stoppedTyping");
     }
   });
