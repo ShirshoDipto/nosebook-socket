@@ -78,26 +78,46 @@ async function createNotification(receiverId, token, userInfo, type) {
   return resData.notification;
 }
 
-io.use((socket, next) => {
+async function sendActiveStatus(userObj, status) {
+  try {
+    userObj.userInfo.friends.forEach(async (fnd) => {
+      const onlineFnd = users[fnd];
+      if (onlineFnd) {
+        io.to(onlineFnd.socketId).emit("receiveUserStatus", {
+          userId: userObj.userInfo._id,
+          status,
+        });
+      }
+    });
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+io.use(async (socket, next) => {
   const user = socket.handshake.auth.user;
   if (!user) {
     return next(new Error("User must be provided."));
   }
 
   socket.userId = user.userInfo._id;
+  const userObj = {
+    userInfo: user.userInfo,
+    token: user.token,
+    socketId: socket.id,
+    currentChat: null,
+    isOnMessenger: false,
+  };
+
   if (!users[`${user.userInfo._id}`]) {
-    users[`${user.userInfo._id}`] = {
-      userInfo: user.userInfo,
-      token: user.token,
-      socketId: socket.id,
-      currentChat: null,
-      isOnMessenger: false,
-    };
+    users[`${user.userInfo._id}`] = userObj;
   }
+
+  sendActiveStatus(userObj, true); // asynchronous
   next();
 });
 
-io.on("connection", async (socket) => {
+io.on("connection", (socket) => {
   console.log(`${socket.userId} connected...`);
 
   socket.on("sendMsg", async ({ receiverId, msg }) => {
@@ -136,20 +156,14 @@ io.on("connection", async (socket) => {
     }
   });
 
-  socket.on("sendPost", async ({ userId, userToken, post }) => {
+  socket.on("sendPost", async (userId) => {
     try {
       const sender = users[userId];
-      const res = await fetch(`${serverRoot}/api/users/${userId}`);
 
-      const resData = await res.json();
-      if (!res.ok) {
-        throw resData;
-      }
-
-      resData.user.friends.forEach(async (fnd) => {
-        const receiver = users[fnd._id];
+      sender.userInfo.friends.forEach(async (fnd) => {
+        const receiver = users[fnd];
         const notif = await createNotification(
-          fnd._id,
+          fnd,
           sender.token,
           sender.userInfo,
           3
@@ -161,6 +175,30 @@ io.on("connection", async (socket) => {
     } catch (error) {
       socket.emit("internalError", error);
     }
+  });
+
+  socket.on("getUserStatus", (theUser) => {
+    const user = users[theUser._id];
+    if (user) {
+      socket.emit("receiveUserStatus", { userId: theUser._id, status: true });
+    } else {
+      socket.emit("receiveUserStatus", { userId: theUser._id, status: false });
+    }
+  });
+
+  socket.on("getFndsStatus", async (user) => {
+    const online = [];
+    const offline = [];
+    user.friends.forEach((fnd) => {
+      const activeFnd = users[fnd._id];
+      if (activeFnd) {
+        online.push(fnd);
+      } else {
+        offline.push(fnd);
+      }
+    });
+
+    socket.emit("receiveFndsStatus", { online, offline });
   });
 
   socket.on("sendTyping", ({ receiverId, chatId }) => {
@@ -192,9 +230,11 @@ io.on("connection", async (socket) => {
     user.currentChat = activeChat;
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     console.log(`${socket.userId} disconnected...`);
+    const user = JSON.parse(JSON.stringify(users[socket.userId]));
     delete users[socket.userId];
+    sendActiveStatus(user, false); // asynchronous
   });
 });
 
