@@ -120,7 +120,7 @@ io.use(async (socket, next) => {
 
   if (!users[`${user.userInfo._id}`]) {
     users[`${user.userInfo._id}`] = userObj;
-    sendActiveStatus(userObj, true); // asynchronous
+    sendActiveStatus({ ...userObj }, true); // asynchronous
   }
 
   next();
@@ -206,7 +206,7 @@ io.on("connection", (socket) => {
   socket.on("getFndsStatus", async (user) => {
     const online = [];
     const offline = [];
-    user.friends.forEach((fnd) => {
+    user.friends.forEach(async (fnd) => {
       const activeFnd = users[fnd._id];
       if (activeFnd) {
         online.push(fnd);
