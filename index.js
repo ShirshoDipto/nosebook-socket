@@ -94,6 +94,15 @@ async function sendActiveStatus(userObj, status) {
   }
 }
 
+async function postEventHelper(fnd, sender) {
+  const receiver = users[fnd];
+  const notif = await createNotification(fnd, sender.token, sender.userInfo, 3);
+
+  if (receiver) {
+    io.to(receiver.socketId).emit("getPost", notif);
+  }
+}
+
 io.use(async (socket, next) => {
   const user = socket.handshake.auth.user;
   if (!user) {
@@ -111,9 +120,9 @@ io.use(async (socket, next) => {
 
   if (!users[`${user.userInfo._id}`]) {
     users[`${user.userInfo._id}`] = userObj;
+    sendActiveStatus(userObj, true); // asynchronous
   }
 
-  sendActiveStatus(userObj, true); // asynchronous
   next();
 });
 
@@ -160,20 +169,28 @@ io.on("connection", (socket) => {
     try {
       const sender = users[userId];
 
-      sender.userInfo.friends.forEach(async (fnd) => {
-        const receiver = users[fnd];
-        const notif = await createNotification(
-          fnd,
-          sender.token,
-          sender.userInfo,
-          3
-        );
-        if (receiver) {
-          io.to(receiver.socketId).emit("getPost", notif);
-        }
-      });
+      await Promise.all(
+        sender.userInfo.friends.map((fnd) => postEventHelper(fnd, sender))
+      );
     } catch (error) {
       socket.emit("internalError", error);
+    }
+  });
+
+  socket.on("sendFndReq", async (notif) => {
+    const sender = users[notif.sender];
+    const receiver = users[notif.receiver];
+
+    if (receiver) {
+      const senderInfos = {
+        _id: notif.sender,
+        firstName: sender.userInfo.firstName,
+        lastName: sender.userInfo.lastName,
+        profilePic: sender.userInfo.profilePic,
+      };
+
+      notif.sender = senderInfos;
+      io.to(receiver.socketId).emit("getFndReq", notif);
     }
   });
 
@@ -216,25 +233,34 @@ io.on("connection", (socket) => {
   });
 
   socket.on("messengerActive", (userId) => {
-    users[userId].isOnMessenger = true;
+    if (users[userId]) {
+      users[userId].isOnMessenger = true;
+    }
   });
 
   socket.on("messengerDeactive", (userId) => {
     const user = users[userId];
-    user.isOnMessenger = false;
-    user.currentChat = null;
+    if (user) {
+      user.isOnMessenger = false;
+      user.currentChat = null;
+    }
   });
 
   socket.on("currentChatActive", ({ userId, activeChat }) => {
     const user = users[userId];
-    user.currentChat = activeChat;
+    if (user) {
+      user.currentChat = activeChat;
+    }
   });
 
   socket.on("disconnect", async () => {
     console.log(`${socket.userId} disconnected...`);
-    const user = JSON.parse(JSON.stringify(users[socket.userId]));
-    delete users[socket.userId];
-    sendActiveStatus(user, false); // asynchronous
+    let user;
+    if (users[socket.userId]) {
+      user = JSON.parse(JSON.stringify(users[socket.userId]));
+      delete users[socket.userId];
+      sendActiveStatus(user, false); // asynchronous
+    }
   });
 });
 
