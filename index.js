@@ -110,6 +110,7 @@ io.use(async (socket, next) => {
   }
 
   socket.userId = user.userInfo._id;
+  socket.userName = user.userInfo.firstName + " " + user.userInfo.lastName;
   const userObj = {
     userInfo: user.userInfo,
     token: user.token,
@@ -127,7 +128,7 @@ io.use(async (socket, next) => {
 });
 
 io.on("connection", (socket) => {
-  console.log(`${socket.userId} connected...`);
+  console.log(`${socket.userName} is connected...`);
 
   socket.on("sendMsg", async ({ receiverId, msg }) => {
     const receiver = users[receiverId];
@@ -258,7 +259,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", async () => {
-    console.log(`${socket.userId} disconnected...`);
+    console.log(`${socket.userName} is disconnected...`);
     let user;
     if (users[socket.userId]) {
       user = JSON.parse(JSON.stringify(users[socket.userId]));
