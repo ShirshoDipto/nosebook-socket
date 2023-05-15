@@ -194,6 +194,10 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("acceptedFndReq", async (notif) => {
+    socket.emit("deleteNotif", notif._id);
+  });
+
   socket.on("getUserStatus", (theUser) => {
     const user = users[theUser._id];
     if (user) {
