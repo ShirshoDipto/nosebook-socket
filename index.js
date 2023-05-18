@@ -41,7 +41,7 @@ async function createMsg(msg, seenBy, token) {
 
 async function checkExistingNotif(receiverId, token) {
   const res = await fetch(
-    `${serverRoot}/api/notifications/isMsgNotif?receiverId=${receiverId}`,
+    `${serverRoot}/api/notifications/existingMsgNotif?receiverId=${receiverId}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
