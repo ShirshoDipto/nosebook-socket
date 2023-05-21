@@ -97,18 +97,14 @@ io.on("connection", (socket) => {
         receiver.currentChat?._id !== msg.conversationId &&
         receiver.isOnMessenger
       ) {
+        io.to(receiver.socketId).emit("getMsg", msg);
+
         await db.createMsg(msg, msg.seenBy, sender.token);
-
-        io.to(receiver.socketId).emit("getMsg", msg);
       } else if (receiver.currentChat._id === msg.conversationId) {
-        await db.createMsg(
-          msg,
-          [msg.sender, receiver.userInfo._id],
-          sender.token
-        );
         msg.seenBy.push(receiver.userInfo._id);
-
         io.to(receiver.socketId).emit("getMsg", msg);
+
+        await db.createMsg(msg, msg.seenBy, sender.token);
       }
     } catch (error) {
       socket.emit("internalError", error);
