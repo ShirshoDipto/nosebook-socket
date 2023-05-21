@@ -1,7 +1,7 @@
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 require("dotenv").config();
-const db = require("./db");
+const apiCalls = require("./apiCalls");
 
 const httpServer = createServer();
 const io = new Server(httpServer, {
@@ -25,23 +25,6 @@ async function sendActiveStatus(userObj, status) {
     });
   } catch (error) {
     console.log(error);
-  }
-}
-
-async function postEventHelper(fnd, sender) {
-  // console.log(fnd);
-  // console.log(sender);
-  const receiver = users[fnd];
-  const notif = await db.createNotification(
-    fnd,
-    sender.token,
-    sender.userInfo,
-    3
-  );
-
-  if (receiver) {
-    // console.log("sending post event");
-    io.to(receiver.socketId).emit("getPost", notif);
   }
 }
 
@@ -78,17 +61,22 @@ io.on("connection", (socket) => {
 
     try {
       if (!receiver || !receiver.isOnMessenger) {
-        const isNotifExist = await db.checkExistingNotif(
+        const isNotifExist = await apiCalls.checkExistingNotif(
           receiverId,
           sender.token
         );
 
         if (isNotifExist) {
-          await db.createMsg(msg, msg.seenBy, sender.token);
+          await apiCalls.createMsg(msg, msg.seenBy, sender.token);
         } else {
           const [newMsg, notif] = await Promise.all([
-            db.createMsg(msg, msg.seenBy, sender.token),
-            db.createNotification(receiverId, sender.token, sender.userInfo, 2),
+            apiCalls.createMsg(msg, msg.seenBy, sender.token),
+            apiCalls.createNotification(
+              receiverId,
+              sender.token,
+              sender.userInfo,
+              2
+            ),
           ]);
 
           io.to(receiver?.socketId).emit("newMsg", notif);
@@ -99,12 +87,12 @@ io.on("connection", (socket) => {
       ) {
         io.to(receiver.socketId).emit("getMsg", msg);
 
-        await db.createMsg(msg, msg.seenBy, sender.token);
+        await apiCalls.createMsg(msg, msg.seenBy, sender.token);
       } else if (receiver.currentChat._id === msg.conversationId) {
         msg.seenBy.push(receiver.userInfo._id);
         io.to(receiver.socketId).emit("getMsg", msg);
 
-        await db.createMsg(msg, msg.seenBy, sender.token);
+        await apiCalls.createMsg(msg, msg.seenBy, sender.token);
       }
     } catch (error) {
       socket.emit("internalError", error);
@@ -114,10 +102,19 @@ io.on("connection", (socket) => {
   socket.on("sendPost", async (userId) => {
     try {
       const sender = users[userId];
+      sender.userInfo.friends.forEach(async (fnd) => {
+        const receiver = users[fnd];
+        const notif = await apiCalls.createNotification(
+          fnd,
+          sender.token,
+          sender.userInfo,
+          3
+        );
 
-      await Promise.all(
-        sender.userInfo.friends.map((fnd) => postEventHelper(fnd, sender))
-      );
+        if (receiver) {
+          io.to(receiver.socketId).emit("getPost", notif);
+        }
+      });
     } catch (error) {
       socket.emit("internalError", error);
     }
