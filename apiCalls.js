@@ -1,3 +1,4 @@
+const fetch = require("cross-fetch");
 const serverRoot = process.env.SERVER_ROOT;
 
 exports.createMsg = async (msg, seenBy, token) => {
@@ -32,12 +33,14 @@ exports.checkExistingNotif = async (receiverId, token) => {
     {
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
       },
     }
   );
 
   const resData = await res.json();
+  if (!res.ok) {
+    throw resData;
+  }
 
   return resData.existingNotif;
 };
