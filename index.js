@@ -6,7 +6,11 @@ const apiCalls = require("./apiCalls");
 const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
-    origin: [process.env.CLIENT_LOCAL, process.env.CLIENT_ORIGINAL],
+    origin: [
+      process.env.CLIENT_LOCAL,
+      process.env.CLIENT_ORIGINAL,
+      process.env.SERVER_ROOT,
+    ],
   },
 });
 
@@ -61,23 +65,18 @@ io.on("connection", (socket) => {
 
     try {
       if (!receiver || !receiver.isOnMessenger) {
-        const isNotifExist = await apiCalls.checkExistingNotif(
-          receiverId,
-          sender.token
-        );
+        const [isNotifExist, newMsg] = await Promise.all([
+          apiCalls.checkExistingNotif(receiverId, sender.token),
+          apiCalls.createMsg(msg, msg.seenBy, sender.token),
+        ]);
 
-        if (isNotifExist) {
-          await apiCalls.createMsg(msg, msg.seenBy, sender.token);
-        } else {
-          const [newMsg, notif] = await Promise.all([
-            apiCalls.createMsg(msg, msg.seenBy, sender.token),
-            apiCalls.createNotification(
-              receiverId,
-              sender.token,
-              sender.userInfo,
-              2
-            ),
-          ]);
+        if (!isNotifExist) {
+          const notif = await apiCalls.createNotification(
+            receiverId,
+            sender.token,
+            sender.userInfo,
+            2
+          );
 
           if (receiver) {
             io.to(receiver.socketId).emit("newMsg", notif);
