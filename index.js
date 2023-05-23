@@ -95,6 +95,7 @@ io.on("connection", (socket) => {
         await apiCalls.createMsg(msg, msg.seenBy, sender.token);
       }
     } catch (error) {
+      console.log(error);
       socket.emit("internalError", error);
     }
   });
@@ -116,6 +117,7 @@ io.on("connection", (socket) => {
         }
       });
     } catch (error) {
+      console.log(error);
       socket.emit("internalError", error);
     }
   });
