@@ -6,7 +6,7 @@ const apiCalls = require("./apiCalls");
 const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
-    origin: [process.env.CLIENTLOCAL, process.env.CLIENTORIGINAL],
+    origin: [process.env.CLIENT_LOCAL, process.env.CLIENT_ORIGINAL],
   },
 });
 

@@ -1,4 +1,4 @@
-const serverRoot = process.env.SERVERROOT;
+const serverRoot = process.env.SERVER_ROOT;
 
 exports.createMsg = async (msg, seenBy, token) => {
   const res = await fetch(
