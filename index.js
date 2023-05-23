@@ -87,14 +87,13 @@ io.on("connection", (socket) => {
         (receiver.isOnMessenger && !receiver.currentChat) ||
         receiver.currentChat._id !== msg.conversationId
       ) {
-        io.to(receiver.socketId).emit("getMsg", msg);
-
         await apiCalls.createMsg(msg, msg.seenBy, sender.token);
+        io.to(receiver.socketId).emit("getMsg", msg);
       } else if (receiver.currentChat._id === msg.conversationId) {
         msg.seenBy.push(receiver.userInfo._id);
-        io.to(receiver.socketId).emit("getMsg", msg);
 
         await apiCalls.createMsg(msg, msg.seenBy, sender.token);
+        io.to(receiver.socketId).emit("getMsg", msg);
       }
     } catch (error) {
       console.log(error);
