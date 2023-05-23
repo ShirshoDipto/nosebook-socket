@@ -79,10 +79,13 @@ io.on("connection", (socket) => {
             ),
           ]);
 
-          io.to(receiver?.socketId).emit("newMsg", notif);
+          if (receiver) {
+            io.to(receiver.socketId).emit("newMsg", notif);
+          }
         }
       } else if (
-        receiver.currentChat?._id !== msg.conversationId &&
+        receiver.currentChat &&
+        receiver.currentChat._id !== msg.conversationId &&
         receiver.isOnMessenger
       ) {
         io.to(receiver.socketId).emit("getMsg", msg);
@@ -169,14 +172,22 @@ io.on("connection", (socket) => {
 
   socket.on("sendTyping", ({ receiverId, chatId }) => {
     const receiver = users[receiverId];
-    if (receiver?.currentChat?._id === chatId) {
+    if (
+      receiver &&
+      receiver.currentChat &&
+      receiver.currentChat._id === chatId
+    ) {
       io.to(receiver.socketId).emit("getTyping");
     }
   });
 
   socket.on("stopTyping", ({ receiverId, chatId }) => {
     const receiver = users[receiverId];
-    if (receiver?.currentChat?._id === chatId) {
+    if (
+      receiver &&
+      receiver.currentChat &&
+      receiver.currentChat._id === chatId
+    ) {
       io.to(receiver.socketId).emit("stoppedTyping");
     }
   });
