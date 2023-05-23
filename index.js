@@ -84,9 +84,8 @@ io.on("connection", (socket) => {
           }
         }
       } else if (
-        receiver.currentChat &&
-        receiver.currentChat._id !== msg.conversationId &&
-        receiver.isOnMessenger
+        (receiver.isOnMessenger && !receiver.currentChat) ||
+        receiver.currentChat._id !== msg.conversationId
       ) {
         io.to(receiver.socketId).emit("getMsg", msg);
 
