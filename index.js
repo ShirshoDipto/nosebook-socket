@@ -90,7 +90,6 @@ io.on("connection", (socket) => {
         io.to(receiver.socketId).emit("getMsg", msg);
       } else if (receiver.currentChat._id === msg.conversationId) {
         msg.seenBy.push(receiver.userInfo._id);
-
         await apiCalls.createMsg(msg, msg.seenBy, sender.token);
         io.to(receiver.socketId).emit("getMsg", msg);
       }
