@@ -17,7 +17,7 @@ const httpServer = createServer((req, res) => {
 
 setInterval(async () => {
   const res = await fetch("https://nosebook-socket.onrender.com/wakeup");
-}, 14 * 60 * 1000);
+}, 10 * 60 * 1000);
 
 const io = new Server(httpServer, {
   cors: {
