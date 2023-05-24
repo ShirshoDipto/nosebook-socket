@@ -1,9 +1,24 @@
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const fetch = require("cross-fetch");
 require("dotenv").config();
 const apiCalls = require("./apiCalls");
 
-const httpServer = createServer();
+const httpServer = createServer((req, res) => {
+  if (req.url === "/wakeup") {
+    console.log("Server is running...");
+    res.end();
+  } else {
+    res.end();
+  }
+}).listen(process.env.PORT, () => {
+  console.log(`Socket server listening on port ${process.env.PORT}`);
+});
+
+setInterval(async () => {
+  const res = await fetch("https://nosebook-socket.onrender.com/wakeup");
+}, 14 * 60 * 1000);
+
 const io = new Server(httpServer, {
   cors: {
     origin: [
@@ -218,8 +233,4 @@ io.on("connection", (socket) => {
       sendActiveStatus(user, false); // asynchronous
     }
   });
-});
-
-httpServer.listen(process.env.PORT, () => {
-  console.log(`Socket server listening on port ${process.env.PORT}`);
 });
