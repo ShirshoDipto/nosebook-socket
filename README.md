@@ -2,9 +2,13 @@
 
 This is the second server for NoseBook app to maintain socket.io operations
 
+[Front-end repository](https://github.com/ShirshoDipto/social-media-client)
+
+[API repository](https://github.com/ShirshoDipto/social-media-api)
+
 ## Running Locally
 
-To run the front-end and socket server locally, follow the instructions on the [Front-end Repository](https://github.com/ShirshoDipto/social-media-client) and [Socket repository](https://github.com/ShirshoDipto/nosebook-socket) respectively.
+To run the front-end and api server locally, follow the instructions on the [Front-end Repository](https://github.com/ShirshoDipto/social-media-client) and [API repository](https://github.com/ShirshoDipto/social-media-api) respectively.
 
 ### Clone repository
 
