@@ -1,2 +1,7 @@
 .env
 node_modules
+.dockerignore
+.gcloudignore
+app.yaml
+Dockerfile
+fly.toml
