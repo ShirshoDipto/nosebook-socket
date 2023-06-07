@@ -29,7 +29,7 @@ PORT = <A port for local address, e.g 4000>
 
 CLIENT_ORIGINAL = <Address of the client. https://nosebook-social.netlify.app or local address, e.g http://localhost:3000>
 
-SERVER_ROOT = <Address of the socket server. https://nosebook-api.fly.dev or local address, e.g http://localhost:5000>
+SERVER_ROOT = <Address of the api server. https://nosebook-api.fly.dev or local address, e.g http://localhost:5000>
 ```
 
 ### Install packages and start server
