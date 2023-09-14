@@ -31,16 +31,22 @@ const io = new Server(httpServer, {
 
 const users = {};
 
+function sendEvent(receiverId, eventName, data) {
+  const receiverInstances = users[receiverId];
+  if (!receiverInstances) return;
+
+  receiverInstances.forEach((instance) => {
+    io.to(instance.socketId).emit(eventName, data);
+  });
+}
+
 async function sendActiveStatus(userObj, status) {
   try {
     userObj.userInfo.friends.forEach(async (fnd) => {
-      const onlineFnd = users[fnd];
-      if (onlineFnd) {
-        io.to(onlineFnd.socketId).emit("receiveUserStatus", {
-          userId: userObj.userInfo._id,
-          status,
-        });
-      }
+      sendEvent(fnd, "receiveUserStatus", {
+        userId: userObj.userInfo._id,
+        status,
+      });
     });
   } catch (error) {
     console.log(error);
@@ -63,9 +69,12 @@ io.use(async (socket, next) => {
     isOnMessenger: false,
   };
 
-  if (!users[user.userInfo._id]) {
-    users[user.userInfo._id] = userObj;
-    sendActiveStatus({ ...userObj }, true); // asynchronous
+  const currUser = users[user.userInfo._id];
+  if (!currUser) {
+    users[user.userInfo._id] = [userObj];
+    sendActiveStatus(JSON.parse(JSON.stringify(userObj)), true); // asynchronous
+  } else {
+    currUser.push(userObj);
   }
 
   next();
@@ -75,16 +84,34 @@ io.on("connection", (socket) => {
   console.log(`${socket.userName} is connected...`);
 
   socket.on("sendMsg", async ({ receiverId, msg }) => {
-    const receiver = users[receiverId];
-    const sender = users[msg.sender._id];
+    const receivers = users[receiverId];
+    const senders = users[msg.sender._id];
+    if (!receivers || !senders) return;
+    const sender = senders[0];
+
+    const homepageUsers = receivers.filter((r) => !r.isOnMessenger);
+    const diffChatUsers = receivers.filter(
+      (r) =>
+        r.isOnMessenger &&
+        (!r.currentChat || r.currentChat?._id !== msg.conversationId)
+    );
+    const sameChatUsers = receivers.filter(
+      (r) => r.currentChat?._id === msg.conversationId
+    );
 
     try {
-      if (!receiver || !receiver.isOnMessenger) {
+      if (sameChatUsers.length > 0) {
+        msg.seenBy.push(receiverId);
+        sendEvent(receiverId, "getMsg", msg);
+        await apiCalls.createMsg(msg, msg.seenBy, sender.token);
+      } else if (diffChatUsers.length > 0) {
+        sendEvent(receiverId, "getMsg", msg);
+        await apiCalls.createMsg(msg, msg.seenBy, sender.token);
+      } else if (homepageUsers.length > 0) {
         const [isNotifExist, newMsg] = await Promise.all([
           apiCalls.checkExistingNotif(receiverId, sender.token),
           apiCalls.createMsg(msg, msg.seenBy, sender.token),
         ]);
-
         if (!isNotifExist) {
           const notif = await apiCalls.createNotification(
             receiverId,
@@ -92,21 +119,8 @@ io.on("connection", (socket) => {
             sender.userInfo,
             2
           );
-
-          if (receiver) {
-            io.to(receiver.socketId).emit("newMsg", notif);
-          }
+          sendEvent(receiverId, "newMsg", notif);
         }
-      } else if (
-        (receiver.isOnMessenger && !receiver.currentChat) ||
-        receiver.currentChat._id !== msg.conversationId
-      ) {
-        io.to(receiver.socketId).emit("getMsg", msg);
-        await apiCalls.createMsg(msg, msg.seenBy, sender.token);
-      } else if (receiver.currentChat._id === msg.conversationId) {
-        msg.seenBy.push(receiver.userInfo._id);
-        io.to(receiver.socketId).emit("getMsg", msg);
-        await apiCalls.createMsg(msg, msg.seenBy, sender.token);
       }
     } catch (error) {
       console.log(error);
@@ -117,18 +131,16 @@ io.on("connection", (socket) => {
   socket.on("sendPost", async (userId) => {
     try {
       const sender = users[userId];
-      sender.userInfo.friends.forEach(async (fnd) => {
-        const receiver = users[fnd];
+      if (!sender) return;
+      sender[0].userInfo.friends.forEach(async (fnd) => {
         const notif = await apiCalls.createNotification(
           fnd,
-          sender.token,
-          sender.userInfo,
+          sender[0].token,
+          sender[0].userInfo,
           3
         );
 
-        if (receiver) {
-          io.to(receiver.socketId).emit("getPost", notif);
-        }
+        sendEvent(fnd, "getPost", notif);
       });
     } catch (error) {
       console.log(error);
@@ -138,18 +150,19 @@ io.on("connection", (socket) => {
 
   socket.on("sendFndReq", async (notif) => {
     const sender = users[notif.sender];
-    const receiver = users[notif.receiver];
+    if (!sender) return;
 
-    if (receiver) {
-      const senderInfos = {
-        _id: notif.sender,
-        firstName: sender.userInfo.firstName,
-        lastName: sender.userInfo.lastName,
-        profilePic: sender.userInfo.profilePic,
-      };
+    const senderInfos = {
+      _id: notif.sender[0],
+      firstName: sender[0].userInfo.firstName,
+      lastName: sender[0].userInfo.lastName,
+      profilePic: sender[0].userInfo.profilePic,
+    };
 
-      notif.sender = senderInfos;
-      io.to(receiver.socketId).emit("getFndReq", notif);
+    notif.sender = senderInfos;
+    sendEvent(notif.receiver, "getFndReq", notif);
+    if (notif.notificationType === 1) {
+      sendEvent(sender[0].userInfo._id, "deleteNotif", notif._id);
     }
   });
 
@@ -182,55 +195,73 @@ io.on("connection", (socket) => {
   });
 
   socket.on("sendTyping", ({ receiverId, chatId }) => {
-    const receiver = users[receiverId];
-    if (
-      receiver &&
-      receiver.currentChat &&
-      receiver.currentChat._id === chatId
-    ) {
-      io.to(receiver.socketId).emit("getTyping");
-    }
+    const receivers = users[receiverId];
+    if (!receivers) return;
+
+    receivers.forEach((receiver) => {
+      if (receiver.currentChat && receiver.currentChat._id === chatId) {
+        io.to(receiver.socketId).emit("getTyping");
+      }
+    });
   });
 
   socket.on("stopTyping", ({ receiverId, chatId }) => {
-    const receiver = users[receiverId];
-    if (
-      receiver &&
-      receiver.currentChat &&
-      receiver.currentChat._id === chatId
-    ) {
-      io.to(receiver.socketId).emit("stoppedTyping");
-    }
+    const receivers = users[receiverId];
+    if (!receivers) return;
+
+    receivers.forEach((receiver) => {
+      if (receiver.currentChat && receiver.currentChat._id === chatId) {
+        io.to(receiver.socketId).emit("stoppedTyping");
+      }
+    });
   });
 
   socket.on("messengerActive", (userId) => {
-    if (users[userId]) {
-      users[userId].isOnMessenger = true;
-    }
+    const allUserInstances = users[userId];
+    if (!allUserInstances) return;
+
+    const currUser = allUserInstances.find(
+      (user) => user.socketId === socket.id
+    );
+
+    currUser.isOnMessenger = true;
   });
 
   socket.on("messengerDeactive", (userId) => {
-    const user = users[userId];
-    if (user) {
-      user.isOnMessenger = false;
-      user.currentChat = null;
-    }
+    const allUserInstances = users[userId];
+    if (!allUserInstances) return;
+
+    const currUser = allUserInstances.find(
+      (user) => user.socketId === socket.id
+    );
+
+    currUser.isOnMessenger = false;
+    currUser.currentChat = null;
   });
 
   socket.on("currentChatActive", ({ userId, activeChat }) => {
-    const user = users[userId];
-    if (user) {
-      user.currentChat = activeChat;
-    }
+    const allUserInstances = users[userId];
+    if (!allUserInstances) return;
+
+    const currUser = allUserInstances.find(
+      (user) => user.socketId === socket.id
+    );
+
+    currUser.currentChat = activeChat;
   });
 
   socket.on("disconnect", async () => {
     console.log(`${socket.userName} is disconnected...`);
-    let user;
-    if (users[socket.userId]) {
-      user = JSON.parse(JSON.stringify(users[socket.userId]));
+    const userInstances = JSON.parse(JSON.stringify(users[socket.userId]));
+
+    if (userInstances && userInstances.length === 1) {
       delete users[socket.userId];
-      sendActiveStatus(user, false); // asynchronous
+      sendActiveStatus(userInstances[0], false); // asynchronous
+    } else {
+      const newUserInstances = userInstances.filter(
+        (i) => i.socketId !== socket.id
+      );
+      users[socket.userId] = newUserInstances;
     }
   });
 });
