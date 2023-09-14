@@ -71,6 +71,8 @@ io.use(async (socket, next) => {
   next();
 });
 
+/** ---------- This was the first implementation ------------ */
+
 io.on("connection", (socket) => {
   console.log(`${socket.userName} is connected...`);
 
